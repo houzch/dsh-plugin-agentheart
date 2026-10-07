@@ -42,9 +42,11 @@ on:
     tags:
       - "plugin-v*"
 
-# 同一 ref 不并发发布，避免两个 run 同时 `npm publish` 造成版本冲突
+# 同一提交不并发发布，避免两个 run 同时 `npm publish` 造成版本冲突。
+# 按 `github.sha` 而非 `github.ref` 分组：`github.ref` 会被「卡死的旧 run」长期占用，
+# 导致后续重新推送标签的 run 一直 pending（曾因 macos-13 已退役而永久排队）。
 concurrency:
-  group: publish-plugin-${{ github.ref }}
+  group: publish-plugin-${{ github.sha }}
   cancel-in-progress: false
 
 permissions:
