@@ -88,7 +88,9 @@ test('就绪超时：拒绝、停止侧车并保留 stderr 诊断', async () => 
     'silent',
     `process.stderr.write('booting agentheartd...\\n')\n${KEEP_ALIVE}`,
   )
-  const supervisor = supervisorFor(script, { startupTimeoutMs: 300 })
+  // 超时必须显著大于子进程启动耗时：否则在负载高的 CI runner 上，定时器会先于
+  // 子进程写出 stderr 触发，导致 stderr 断言偶发失败。
+  const supervisor = supervisorFor(script, { startupTimeoutMs: 1000 })
   try {
     await assert.rejects(() => supervisor.start(), /未就绪/)
     await waitUntil(() => !supervisor.running)
@@ -104,7 +106,7 @@ test('stderr 仅保留最近 2048 字符', async () => {
     'noisy',
     `process.stderr.write('x'.repeat(3000) + 'TAIL')\n${KEEP_ALIVE}`,
   )
-  const supervisor = supervisorFor(script, { startupTimeoutMs: 300 })
+  const supervisor = supervisorFor(script, { startupTimeoutMs: 1000 })
   try {
     await assert.rejects(() => supervisor.start(), /未就绪/)
     assert.ok(supervisor.lastStderr.length <= 2048)

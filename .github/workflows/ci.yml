@@ -28,7 +28,13 @@ jobs:
         run: npm run typecheck
 
       - name: 测试
-        run: npm test
+        run: |
+          set -o pipefail
+          if ! npm test 2>&1 | tee test.log; then
+            # 把失败用例名回显为 annotation：Actions 日志需登录才能查看，annotation 公开可读
+            echo "::error::$(grep -a '✖' test.log | head -n 5 | paste -sd '; ' -)"
+            exit 1
+          fi
 
       - name: 构建
         run: npm run build
