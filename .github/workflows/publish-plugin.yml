@@ -1,33 +1,35 @@
 # AgentHeart DSH 插件发布（公开仓库）
 #
-# 顺序：**平台子包先于主包** —— 主包 `optionalDependencies` 以**同版本**引用子包，
-# 顺序不可颠倒（`needs: platform-packages` 强制）。发布前须先发齐 5 个平台子包。
+# 产物与去向（**产物生产不依赖任何 npm 凭据**）：
+#   1) Actions artifacts —— 每次运行都产出 6 个 tarball（1 主包 + 5 平台子包）；
+#   2) GitHub Release —— tag 触发时，把上述 6 个 tarball 作为 Release 资产；
+#   3) npm 发布（**可选**）——仅在配置了 `NPM_TOKEN` 时执行；未配置则**跳过而非失败**。
+#
+# 顺序：**平台子包先于主包** —— 主包 `optionalDependencies` 以**同版本**引用子包，顺序不可颠倒。
 #
 # 触发：手动（`workflow_dispatch`，填版本号）或打 tag `plugin-v<version>`。
+#   注：手动 dispatch **不创建 Release**（无 tag），只产出 artifacts；`NPM_TOKEN` 存在时仍会发 npm。
 #
-# 前置（一次性，需人工）：
+# 前置（一次性，需人工；仅第 3 步需要）：
 #   1) 在 npm 创建组织 `agentheart`；
-#   2) 配置 CI 发布凭据，二选一：
+#   2) 配置发布凭据，二选一：
 #      A（推荐）Trusted Publishing（OIDC 免令牌）：在**每个**包（主包 + 5 子包）的设置页
-#        配置 Trusted Publisher —— Organization or user = <GitHub owner>、
+#        配置 Trusted Publisher —— Organization or user = houzch、
 #        Repository = `dsh-plugin-agentheart`、Workflow filename = `publish-plugin.yml`，
 #        并勾选允许 `npm publish`（默认只允许 stage publish）。
 #        需 npm CLI ≥ 11.5.1（Node ≥ 22.14）；本工作流已声明 `id-token: write` 并显式升级 npm。
-#      B Granular Access Token（GAT）：注意 classic/Automation Token 已于 2025-11 移除。
+#      B Granular Access Token（GAT）：classic/Automation Token 已于 2025-11 移除。
 #        创建 GAT 时 `Packages and scopes` 选 scope `@agentheart` + `Read and write (publish and stage)`，
 #        勾选 `Bypass two-factor authentication`，存为仓库 secret `NPM_TOKEN`。
 #        （仅给 Organizations 授权**不能**发布该组织的包。）
 #   ⚠ npm 已宣布：**bypass-2FA 令牌的直接发布**将于 **2027-01** 停用——届时改用
 #     `Read and write (stage only)` + `npm stage publish`（维护者批准），或改用 OIDC。
 #
-# provenance：本仓库为**公开**仓库 + GitHub Actions OIDC ⇒ 已启用 `NPM_CONFIG_PROVENANCE=true`
-#   生成签名证明（如需关闭，删除下方该 env 即可）。
+# provenance：本仓库为**公开**仓库 + GitHub Actions OIDC ⇒ `NPM_CONFIG_PROVENANCE=true`
+#   （要求 `package.json#repository` 公开且与发布来源一致 —— 已满足）。
 #
-# GitHub Release：tag 触发时，额外把**主包 + 5 个平台子包**的 tarball 作为 Release 资产上传
-#   （供离线 / 内网 / 免 npm 的环境安装）。需 `contents: write`，已**限定**在 release job；
-#   若组织把 GITHUB_TOKEN 设为只读，该 job 会失败（不影响已完成的 npm 发布）。
-#
-# 平台矩阵与 `package.json` 的 `optionalDependencies` 对齐（本地 `src/binary.test.ts` 已断言）。
+# GitHub Release 需 `contents: write`，已**限定**在 release job；
+#   若组织把 GITHUB_TOKEN 设为只读，该 job 会失败（**不影响** artifacts 与 npm 发布）。
 name: Publish plugin
 
 on:
@@ -39,6 +41,11 @@ on:
   push:
     tags:
       - "plugin-v*"
+
+# 同一 ref 不并发发布，避免两个 run 同时 `npm publish` 造成版本冲突
+concurrency:
+  group: publish-plugin-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -52,7 +59,28 @@ env:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # 1) 平台子包：各平台**原生**构建侧车并发布（避免交叉编译）
+  # 0) 探测是否配置了 NPM_TOKEN：控制「npm 发布」是否执行（无凭据则跳过，不失败）
+  # ---------------------------------------------------------------------------
+  gate:
+    name: 探测发布凭据
+    runs-on: ubuntu-latest
+    outputs:
+      has_token: ${{ steps.check.outputs.has_token }}
+    steps:
+      - id: check
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -n "$NPM_TOKEN" ]; then
+            echo "has_token=true" >> "$GITHUB_OUTPUT"
+            echo "检测到 NPM_TOKEN：将执行 npm 发布"
+          else
+            echo "has_token=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::未配置 NPM_TOKEN —— 跳过 npm 发布，仅产出 artifacts / GitHub Release"
+          fi
+
+  # ---------------------------------------------------------------------------
+  # 1) 平台子包：各平台**原生**构建侧车 → 生成子包 → 打 tarball 上传（不碰 npm 凭据）
   #    linux-arm64 使用 arm64 runner；若组织不可用，可改为 `cross` 交叉编译。
   # ---------------------------------------------------------------------------
   platform-packages:
@@ -85,6 +113,11 @@ jobs:
       - name: 构建侧车
         run: cargo build --release --bin agentheartd --manifest-path ../agentheart/Cargo.toml
 
+      - name: 安装 Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
       - name: 校验版本一致
         shell: bash
         run: |
@@ -97,53 +130,31 @@ jobs:
       - name: 生成平台子包
         run: node scripts/build-platform-packages.mjs --target ${{ matrix.target }}
 
-      - name: 安装 Node（发布用）
-        uses: actions/setup-node@v4
-        with:
-          node-version: "24"
-          registry-url: "https://registry.npmjs.org"
-
-      # Trusted Publishing(OIDC) 需 npm CLI ≥ 11.5.1；显式升级，不依赖 Node 自带版本
-      - name: 升级 npm CLI（OIDC 要求 ≥ 11.5.1）
-        run: npm install -g npm@11
-
       - name: 打包子包 tarball
         working-directory: platforms/@agentheart/agentheartd-${{ matrix.target }}
         run: npm pack
 
-      - name: 上传子包 tarball（供 Release）
+      - name: 上传子包 tarball
         uses: actions/upload-artifact@v4
         with:
           name: sub-${{ matrix.target }}
           path: platforms/@agentheart/agentheartd-${{ matrix.target }}/*.tgz
           if-no-files-found: error
 
-      - name: 发布平台子包
-        working-directory: platforms/@agentheart/agentheartd-${{ matrix.target }}
-        run: npm publish
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
   # ---------------------------------------------------------------------------
-  # 2) 主包：全部平台子包发布成功后再发
+  # 2) 主包：安装依赖 → 构建 → 打 tarball 上传（不碰 npm 凭据）
   # ---------------------------------------------------------------------------
   main-package:
     name: 主包
-    needs: platform-packages
     runs-on: ubuntu-latest
     steps:
       - name: 检出本仓库（插件）
         uses: actions/checkout@v4
 
-      - name: 安装 Node（发布用）
+      - name: 安装 Node
         uses: actions/setup-node@v4
         with:
           node-version: "24"
-          registry-url: "https://registry.npmjs.org"
-
-      # Trusted Publishing(OIDC) 需 npm CLI ≥ 11.5.1；显式升级，不依赖 Node 自带版本
-      - name: 升级 npm CLI（OIDC 要求 ≥ 11.5.1）
-        run: npm install -g npm@11
 
       # 用 install 而非 ci：lockfile 中平台子包条目尚未发布（optional、无解析结果），
       # `--omit=optional` 跳过即可——主包构建只需 @deepseek-ai/*（dev 依赖）。
@@ -162,28 +173,61 @@ jobs:
       - name: 打包主包 tarball
         run: npm pack
 
-      - name: 上传主包 tarball（供 Release）
+      - name: 上传主包 tarball
         uses: actions/upload-artifact@v4
         with:
           name: main
           path: "*.tgz"
           if-no-files-found: error
 
-      - name: 发布主包
-        run: npm publish
+  # ---------------------------------------------------------------------------
+  # 3) npm 发布（可选）：仅在存在 NPM_TOKEN 时执行；**先子包、后主包**
+  # ---------------------------------------------------------------------------
+  publish-npm:
+    name: npm 发布（子包 → 主包）
+    needs: [gate, platform-packages, main-package]
+    if: ${{ needs.gate.outputs.has_token == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: 安装 Node（发布用）
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+
+      # Trusted Publishing(OIDC) 需 npm CLI ≥ 11.5.1；显式升级，不依赖 Node 自带版本
+      - name: 升级 npm CLI（OIDC 要求 ≥ 11.5.1）
+        run: npm install -g npm@11
+
+      - name: 下载全部 tarball
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: 发布（先 5 个平台子包，再主包）
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          ls -l dist
+          for tarball in dist/sub-*/*.tgz; do
+            echo "::group::publish ${tarball}"
+            npm publish "${tarball}"
+            echo "::endgroup::"
+          done
+          echo "::group::publish main"
+          npm publish dist/main/*.tgz
+          echo "::endgroup::"
 
   # ---------------------------------------------------------------------------
-  # 3) GitHub Release：汇总「主包 + 5 个平台子包」tarball（离线 / 内网 / 免 npm 安装）
-  #    仅在 tag 触发时创建；手动 `workflow_dispatch` 只产出 Actions artifacts，不发 Release。
+  # 4) GitHub Release：汇总 6 个 tarball 作为资产（离线 / 内网 / 免 npm 安装）
+  #    仅 tag 触发时创建；**不依赖 npm 发布**（无凭据也能产出）。
   # ---------------------------------------------------------------------------
   release:
     name: GitHub Release
     needs: [platform-packages, main-package]
     if: startsWith(github.ref, 'refs/tags/plugin-v')
     runs-on: ubuntu-latest
-    # 仅此 job 需要写权限（创建 Release）；其余 job 保持只读
     permissions:
       contents: write
     steps:

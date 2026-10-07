@@ -161,6 +161,9 @@ npm publish
 **CI 发布**：[`.github/workflows/publish-plugin.yml`](.github/workflows/publish-plugin.yml) 以 5 平台**原生矩阵**构建侧车 → 发布子包 → 再发布主包（`needs` 强制顺序）→ tag 触发时汇总 **6 个 tarball** 建 **GitHub Release**（供离线/内网安装）。
 本仓库**公开** + GitHub Actions OIDC ⇒ 已启用 `NPM_CONFIG_PROVENANCE=true` 生成签名证明。
 
+> 分发通道：**npmjs（主）+ GitHub Release 资产（离线 / 内网）**；**不接 GitHub Packages**
+> （其要求包 scope 与仓库 owner 一致，且公开包安装也需 access token/PAT）。
+
 **未决 / 已知限制**
 
 - **平台子包不在本仓库提交**：`platforms/` 已 gitignore，须在发布前用 `npm run pack:platforms` 产出；
