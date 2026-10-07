@@ -23,6 +23,10 @@
 # provenance：本仓库为**公开**仓库 + GitHub Actions OIDC ⇒ 已启用 `NPM_CONFIG_PROVENANCE=true`
 #   生成签名证明（如需关闭，删除下方该 env 即可）。
 #
+# GitHub Release：tag 触发时，额外把**主包 + 5 个平台子包**的 tarball 作为 Release 资产上传
+#   （供离线 / 内网 / 免 npm 的环境安装）。需 `contents: write`，已**限定**在 release job；
+#   若组织把 GITHUB_TOKEN 设为只读，该 job 会失败（不影响已完成的 npm 发布）。
+#
 # 平台矩阵与 `package.json` 的 `optionalDependencies` 对齐（本地 `src/binary.test.ts` 已断言）。
 name: Publish plugin
 
@@ -103,6 +107,17 @@ jobs:
       - name: 升级 npm CLI（OIDC 要求 ≥ 11.5.1）
         run: npm install -g npm@11
 
+      - name: 打包子包 tarball
+        working-directory: platforms/@agentheart/agentheartd-${{ matrix.target }}
+        run: npm pack
+
+      - name: 上传子包 tarball（供 Release）
+        uses: actions/upload-artifact@v4
+        with:
+          name: sub-${{ matrix.target }}
+          path: platforms/@agentheart/agentheartd-${{ matrix.target }}/*.tgz
+          if-no-files-found: error
+
       - name: 发布平台子包
         working-directory: platforms/@agentheart/agentheartd-${{ matrix.target }}
         run: npm publish
@@ -144,7 +159,48 @@ jobs:
           echo "package.json=$pkg 期望=$expected"
           [ "$pkg" = "$expected" ] || { echo "::error::版本不一致"; exit 1; }
 
+      - name: 打包主包 tarball
+        run: npm pack
+
+      - name: 上传主包 tarball（供 Release）
+        uses: actions/upload-artifact@v4
+        with:
+          name: main
+          path: "*.tgz"
+          if-no-files-found: error
+
       - name: 发布主包
         run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  # ---------------------------------------------------------------------------
+  # 3) GitHub Release：汇总「主包 + 5 个平台子包」tarball（离线 / 内网 / 免 npm 安装）
+  #    仅在 tag 触发时创建；手动 `workflow_dispatch` 只产出 Actions artifacts，不发 Release。
+  # ---------------------------------------------------------------------------
+  release:
+    name: GitHub Release
+    needs: [platform-packages, main-package]
+    if: startsWith(github.ref, 'refs/tags/plugin-v')
+    runs-on: ubuntu-latest
+    # 仅此 job 需要写权限（创建 Release）；其余 job 保持只读
+    permissions:
+      contents: write
+    steps:
+      - name: 下载全部 tarball
+        uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+          path: release-assets
+
+      - name: 列出产物
+        run: ls -l release-assets
+
+      - name: 创建 Release 并上传资产
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" release-assets/*.tgz \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            --verify-tag

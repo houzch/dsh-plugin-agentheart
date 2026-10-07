@@ -23,9 +23,9 @@ DSH (Node/TS + Cordis)  ──插件──▶  回环 TCP 帧协议  ──▶  
 dsh plugin --profile <profile> add @agentheart/dsh-plugin-agentheart
 
 # 通道 B：GitHub 仓库（pnpm≥10 首次需把包 key 写入 profile 的 pnpm-workspace.yaml 的 allowBuilds）
-dsh plugin --profile <profile> add github:<owner>/dsh-plugin-agentheart
+dsh plugin --profile <profile> add github:houzch/dsh-plugin-agentheart
 
-# 通道 C：本地目录 / tarball（内部分发、零账号）
+# 通道 C：本地目录 / tarball（内部分发、零账号；tarball 亦见 GitHub Release 资产）
 dsh plugin --profile <profile> add ./dsh-plugin-agentheart
 dsh plugin --profile <profile> add ./agentheart-dsh-plugin-agentheart-0.1.0.tgz
 
@@ -158,7 +158,7 @@ npm publish
 `<公开仓库>/target/release/agentheartd[.exe]` 定位（可用 `--binary` / `AH_SIDECAR_BINARY` / `AH_PUBLIC_ROOT` 覆盖）。
 
 **CI**：[`.github/workflows/ci.yml`](.github/workflows/ci.yml)（typecheck / test / build / 打包冒烟）；
-**CI 发布**：[`.github/workflows/publish-plugin.yml`](.github/workflows/publish-plugin.yml) 以 5 平台**原生矩阵**构建侧车 → 发布子包 → 再发布主包（`needs` 强制顺序）。
+**CI 发布**：[`.github/workflows/publish-plugin.yml`](.github/workflows/publish-plugin.yml) 以 5 平台**原生矩阵**构建侧车 → 发布子包 → 再发布主包（`needs` 强制顺序）→ tag 触发时汇总 **6 个 tarball** 建 **GitHub Release**（供离线/内网安装）。
 本仓库**公开** + GitHub Actions OIDC ⇒ 已启用 `NPM_CONFIG_PROVENANCE=true` 生成签名证明。
 
 **未决 / 已知限制**
