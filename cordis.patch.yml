@@ -1,0 +1,12 @@
+# AgentHeart 插件挂载补丁（DSH bundle 规范）
+# name 写“包名”（由 Node 解析），而非源码路径；scoped 包名须加引号。
+- insert:
+    - id: agentheart
+      name: '@agentheart/dsh-plugin-agentheart'
+      config:
+        mode: sidecar            # sidecar（默认，使用平台子包二进制）| external（连接既有侧车）
+        binaryPath: ''           # 留空 = 自动解析平台子包；可覆盖为自定义路径
+        eventTopics: ['task', 'delivery', 'error', 'loop', 'rule']
+        kernel:
+          workers: 0             # 0 表示内核默认
+          heartbeatMs: 1000

@@ -1,0 +1,8 @@
+node_modules/
+lib/
+test-build/
+platforms/
+*.tgz
+*.log
+.idea
+.idea/

@@ -1,0 +1,150 @@
+# AgentHeart DSH 插件发布（公开仓库）
+#
+# 顺序：**平台子包先于主包** —— 主包 `optionalDependencies` 以**同版本**引用子包，
+# 顺序不可颠倒（`needs: platform-packages` 强制）。发布前须先发齐 5 个平台子包。
+#
+# 触发：手动（`workflow_dispatch`，填版本号）或打 tag `plugin-v<version>`。
+#
+# 前置（一次性，需人工）：
+#   1) 在 npm 创建组织 `agentheart`；
+#   2) 配置 CI 发布凭据，二选一：
+#      A（推荐）Trusted Publishing（OIDC 免令牌）：在**每个**包（主包 + 5 子包）的设置页
+#        配置 Trusted Publisher —— Organization or user = <GitHub owner>、
+#        Repository = `dsh-plugin-agentheart`、Workflow filename = `publish-plugin.yml`，
+#        并勾选允许 `npm publish`（默认只允许 stage publish）。
+#        需 npm CLI ≥ 11.5.1（Node ≥ 22.14）；本工作流已声明 `id-token: write` 并显式升级 npm。
+#      B Granular Access Token（GAT）：注意 classic/Automation Token 已于 2025-11 移除。
+#        创建 GAT 时 `Packages and scopes` 选 scope `@agentheart` + `Read and write (publish and stage)`，
+#        勾选 `Bypass two-factor authentication`，存为仓库 secret `NPM_TOKEN`。
+#        （仅给 Organizations 授权**不能**发布该组织的包。）
+#   ⚠ npm 已宣布：**bypass-2FA 令牌的直接发布**将于 **2027-01** 停用——届时改用
+#     `Read and write (stage only)` + `npm stage publish`（维护者批准），或改用 OIDC。
+#
+# provenance：本仓库为**公开**仓库 + GitHub Actions OIDC ⇒ 已启用 `NPM_CONFIG_PROVENANCE=true`
+#   生成签名证明（如需关闭，删除下方该 env 即可）。
+#
+# 平台矩阵与 `package.json` 的 `optionalDependencies` 对齐（本地 `src/binary.test.ts` 已断言）。
+name: Publish plugin
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "版本号（须与 package.json 一致，如 0.1.0）"
+        required: true
+  push:
+    tags:
+      - "plugin-v*"
+
+permissions:
+  contents: read
+  # Trusted Publishing（OIDC）/ provenance 所需；与 NPM_TOKEN 回退可并存
+  id-token: write
+
+env:
+  CARGO_TERM_COLOR: always
+  AH_PUBLIC_ROOT: ${{ github.workspace }}/../agentheart
+  NPM_CONFIG_PROVENANCE: "true"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1) 平台子包：各平台**原生**构建侧车并发布（避免交叉编译）
+  #    linux-arm64 使用 arm64 runner；若组织不可用，可改为 `cross` 交叉编译。
+  # ---------------------------------------------------------------------------
+  platform-packages:
+    name: 平台子包（${{ matrix.target }}）
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            target: win32-x64
+          - runner: macos-13
+            target: darwin-x64
+          - runner: macos-14
+            target: darwin-arm64
+          - runner: ubuntu-latest
+            target: linux-x64
+          - runner: ubuntu-24.04-arm
+            target: linux-arm64
+    steps:
+      - name: 检出本仓库（插件）
+        uses: actions/checkout@v4
+
+      - name: 检出内核仓库到同级目录
+        run: git clone --depth 1 "https://github.com/${{ github.repository_owner }}/agentheart.git" ../agentheart
+
+      - name: 安装 Rust 工具链
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: 构建侧车
+        run: cargo build --release --bin agentheartd --manifest-path ../agentheart/Cargo.toml
+
+      - name: 校验版本一致
+        shell: bash
+        run: |
+          pkg=$(node -p "require('./package.json').version")
+          expected="${{ github.event.inputs.version }}"
+          if [ -z "$expected" ]; then expected="${GITHUB_REF_NAME#plugin-v}"; fi
+          echo "package.json=$pkg 期望=$expected"
+          [ "$pkg" = "$expected" ] || { echo "::error::版本不一致"; exit 1; }
+
+      - name: 生成平台子包
+        run: node scripts/build-platform-packages.mjs --target ${{ matrix.target }}
+
+      - name: 安装 Node（发布用）
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+
+      # Trusted Publishing(OIDC) 需 npm CLI ≥ 11.5.1；显式升级，不依赖 Node 自带版本
+      - name: 升级 npm CLI（OIDC 要求 ≥ 11.5.1）
+        run: npm install -g npm@11
+
+      - name: 发布平台子包
+        working-directory: platforms/@agentheart/agentheartd-${{ matrix.target }}
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  # ---------------------------------------------------------------------------
+  # 2) 主包：全部平台子包发布成功后再发
+  # ---------------------------------------------------------------------------
+  main-package:
+    name: 主包
+    needs: platform-packages
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出本仓库（插件）
+        uses: actions/checkout@v4
+
+      - name: 安装 Node（发布用）
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+
+      # Trusted Publishing(OIDC) 需 npm CLI ≥ 11.5.1；显式升级，不依赖 Node 自带版本
+      - name: 升级 npm CLI（OIDC 要求 ≥ 11.5.1）
+        run: npm install -g npm@11
+
+      # 用 install 而非 ci：lockfile 中平台子包条目尚未发布（optional、无解析结果），
+      # `--omit=optional` 跳过即可——主包构建只需 @deepseek-ai/*（dev 依赖）。
+      - name: 安装依赖并构建
+        run: npm install --omit=optional --no-audit --no-fund
+
+      - name: 校验版本一致
+        shell: bash
+        run: |
+          pkg=$(node -p "require('./package.json').version")
+          expected="${{ github.event.inputs.version }}"
+          if [ -z "$expected" ]; then expected="${GITHUB_REF_NAME#plugin-v}"; fi
+          echo "package.json=$pkg 期望=$expected"
+          [ "$pkg" = "$expected" ] || { echo "::error::版本不一致"; exit 1; }
+
+      - name: 发布主包
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

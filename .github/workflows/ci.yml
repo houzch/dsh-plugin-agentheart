@@ -1,0 +1,41 @@
+# CI：类型检查 / 测试 / 构建 / 打包冒烟
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出
+        uses: actions/checkout@v4
+
+      - name: 安装 Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      # 平台子包尚未发布（optional、无解析结果）；`--omit=optional` 跳过即可，
+      # 构建与测试只需 @deepseek-ai/*（dev 依赖）。
+      - name: 安装依赖
+        run: npm install --omit=optional --no-audit --no-fund
+
+      - name: 类型检查
+        run: npm run typecheck
+
+      - name: 测试
+        run: npm test
+
+      - name: 构建
+        run: npm run build
+
+      - name: 打包冒烟（产物不得含测试 / 辅助 / 脚本）
+        run: |
+          npm pack --dry-run 2>&1 | tee pack.txt
+          if grep -Eq '\.test\.|test-helpers|\bscripts/|platforms/' pack.txt; then
+            echo "::error::发布产物混入测试或脚本"; exit 1
+          fi
