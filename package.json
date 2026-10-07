@@ -1,6 +1,6 @@
 {
   "name": "@agentheart/dsh-plugin-agentheart",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "AgentHeart 调度内核的 DeepSeek Harness 嵌入式插件（Sidecar + Cordis）：任务 / 定时 / 队列 / 循环 / 自动化规则",
   "keywords": [
     "dsh-plugin",
@@ -58,11 +58,11 @@
     }
   },
   "optionalDependencies": {
-    "@agentheart/agentheartd-win32-x64": "0.1.0",
-    "@agentheart/agentheartd-darwin-x64": "0.1.0",
-    "@agentheart/agentheartd-darwin-arm64": "0.1.0",
-    "@agentheart/agentheartd-linux-x64": "0.1.0",
-    "@agentheart/agentheartd-linux-arm64": "0.1.0"
+    "@agentheart/agentheartd-win32-x64": "1.0.0",
+    "@agentheart/agentheartd-darwin-x64": "1.0.0",
+    "@agentheart/agentheartd-darwin-arm64": "1.0.0",
+    "@agentheart/agentheartd-linux-x64": "1.0.0",
+    "@agentheart/agentheartd-linux-arm64": "1.0.0"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "~4.0.4",

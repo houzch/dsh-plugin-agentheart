@@ -27,7 +27,7 @@ dsh plugin --profile <profile> add github:houzch/dsh-plugin-agentheart
 
 # 通道 C：本地目录 / tarball（内部分发、零账号；tarball 亦见 GitHub Release 资产）
 dsh plugin --profile <profile> add ./dsh-plugin-agentheart
-dsh plugin --profile <profile> add ./agentheart-dsh-plugin-agentheart-0.1.0.tgz
+dsh plugin --profile <profile> add ./agentheart-dsh-plugin-agentheart-1.0.0.tgz
 
 # 开发期：直接指向 TS 源码（免打包、免构建）
 pnpm dsh web --patch /abs/path/to/dsh-plugin-agentheart/cordis.patch.yml
