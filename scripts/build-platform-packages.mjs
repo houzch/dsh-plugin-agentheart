@@ -113,6 +113,8 @@ function build(job) {
     version: VERSION,
     description: `AgentHeart 侧车二进制（${job.target}）——供 @agentheart/dsh-plugin-agentheart 使用`,
     license: 'MIT',
+    // 与主包共用源码仓库（单一事实源：主包 package.json 的 repository）
+    ...(manifest.repository ? { repository: manifest.repository } : {}),
     os: [platform],
     cpu: [arch],
     files: ['bin'],

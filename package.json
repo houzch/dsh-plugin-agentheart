@@ -10,6 +10,15 @@
     "scheduler"
   ],
   "license": "MIT",
+  "author": "houzch",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/houzch/dsh-plugin-agentheart.git"
+  },
+  "homepage": "https://github.com/houzch/dsh-plugin-agentheart#readme",
+  "bugs": {
+    "url": "https://github.com/houzch/dsh-plugin-agentheart/issues"
+  },
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",

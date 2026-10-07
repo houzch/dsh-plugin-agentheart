@@ -117,7 +117,7 @@ npm test            # 编译到 test-build/ 后由 node:test 运行
 | `publishConfig.access` | `public`（scoped 包发布必需，已在 `package.json` 配置） |
 | `npm publish --dry-run` | ✅ 通过：44 文件 / 36.5 kB，输出 `with tag latest and public access` |
 | 质量门禁 | ✅ `typecheck` / `test`（49 例：48 通过 / 1 跳过）/ `build` / `pack --dry-run` 全绿 |
-| 仓库布局 | 独立**公开**仓库（与内核 `agentheart` **同级**）；`repository` 字段待补 GitHub owner |
+| 仓库布局 | 独立**公开**仓库 [`houzch/dsh-plugin-agentheart`](https://github.com/houzch/dsh-plugin-agentheart)（内核镜像 `houzch/agentheart` 同级）；`repository` / `homepage` / `bugs` 已补齐 |
 
 **待人工执行（当前阻塞项）**
 
@@ -126,7 +126,7 @@ npm test            # 编译到 test-build/ 后由 node:test 运行
 3. 配置 CI 发布凭据——**二选一**：
 
    **A（推荐）Trusted Publishing（OIDC 免令牌）**：npm 包设置页 → *Trusted Publisher* → GitHub Actions，
-   填 **Organization or user = `<owner>`**、**Repository = `dsh-plugin-agentheart`**、
+   填 **Organization or user = `houzch`**、**Repository = `dsh-plugin-agentheart`**、
    **Workflow filename = `publish-plugin.yml`**，并勾选允许 `npm publish`。免长期令牌；需 npm CLI ≥ 11.5.1（Node ≥ 22.14），
    CI 已显式升级 npm。注意：**通常需包已存在才能配置**，故**首次发布**可能仍需先走 B。
 
@@ -167,7 +167,7 @@ npm publish
   本地（未指定 `--target`）只会产出**当前平台**，其余平台需在各自环境/CI 产出，**发齐 5 个同版本子包后**才能发主包。
   若在子包发布前发主包，应**临时移除 `optionalDependencies`**（使用者改用 `config.binaryPath` 或 `mode: external`），
   否则安装侧会尝试拉取不存在的可选依赖（npm 降级为警告，pnpm 会报错）。
-- `repository` / `homepage` / `bugs` 字段待补：需先确定 GitHub owner（见上方「待人工执行」），补上后 npm 页面链接与 provenance 元数据才完整。
+- 平台子包与主包共用 `repository`（生成脚本从主包 `package.json` 读取），npm 页面统一回链到本仓库。
 
 ## 版本对齐
 
